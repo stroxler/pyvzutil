@@ -1,2 +1,3 @@
 *.pyc
 pyvzutil.egg-info
+dist

@@ -15,4 +15,4 @@ package: clean
 # once.
 
 pypi: package
-	 twine upload dist/pyvzutil-0.0.1.tar.gz
+	 twine upload dist/pyvzutil-0.0.2.tar.gz

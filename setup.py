@@ -2,12 +2,12 @@ from setuptools import setup
 
 
 def readme():
-    with open('readme.md') as f:
+    with open('README') as f:
         return f.read()
 
 
 setup(name='pyvzutil',
-      version='0.0.1',
+      version='0.0.2',
       description='Utilities for working with openvz clusters',
       long_description=readme(),
       classifiers=[
