@@ -20,7 +20,7 @@ def pse(line):
 
 class SshToVzRunner(object):
 
-    def __init__(self, ctid, host, port=22, ssh_options=[]):
+    def __init__(self, ctid, host, user='root', port=22, ssh_options=[]):
         """
         Create a Runner to access a vz container on a remote host.
 
@@ -33,7 +33,7 @@ class SshToVzRunner(object):
         ssh_options : list of flags to ssh
             ssh options, e.g. ['-p', '2222', '-o', 'StrictHostKeyChecking=no']
         """
-        self.ssh_runner = SshRunner(host, port, ssh_options)
+        self.ssh_runner = SshRunner(host, user, port, ssh_options)
         self.ctid = ctid
 
     def run(self, commands, quiet=False):
@@ -80,7 +80,7 @@ class SshToVzRunner(object):
 
 class SshRunner(object):
 
-    def __init__(self, host, port=22, ssh_options=[]):
+    def __init__(self, host, user='root', port=22, ssh_options=[]):
         """
         Parameters
         ----------
@@ -90,6 +90,8 @@ class SshRunner(object):
             ssh options, e.g. ['-p', '2222', '-o', 'StrictHostKeyChecking=no']
         """
         self.host = host
+        self.user = user
+        self.target = '%s@%s' % (user, host)
         self.port = port
         self.ssh_options = ['-p', '%d' % port]
         self.scp_options = ['-P', '%d' % port]
@@ -101,9 +103,9 @@ class SshRunner(object):
     def run(self, commands, quiet=False):
         "Run a command or a script of commands on the target machine"
         if quiet:
-            return self.ssh(self.host, _in=commands)
+            return self.ssh(self.target, _in=commands)
         else:
-            return self.ssh(self.host, _in=commands,
+            return self.ssh(self.target, _in=commands,
                             _out=pse, _err=pse, _tee=True)
 
     def copy_from(self, src, dest, quiet=False):
@@ -129,7 +131,7 @@ class SshRunner(object):
                             _out=pse, _err=pse, _tee=True)
 
     def get_scp_dir(self, path):
-        return '%s:%s' % (self.host, path)
+        return '%s:%s' % (self.target, path)
 
     def interactive(self):
         "Open an interactive shell on the target machine"
@@ -141,9 +143,9 @@ class SshRunner(object):
         on the target
         """
         if which == 'ssh':
-            return "ssh %s %s" % (' '.join(self.ssh_options), self.host)
+            return "ssh %s %s" % (' '.join(self.ssh_options), self.target)
         elif which == 'scp':
-            return "scp %s %s" % (' '.join(self.scp_options), self.host)
+            return "scp %s %s" % (' '.join(self.scp_options), self.target)
         else:
             raise ValueError('`which` should be either "ssh" or "scp"')
 
