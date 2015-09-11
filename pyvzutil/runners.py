@@ -102,33 +102,23 @@ class SshRunner(object):
 
     def run(self, commands, quiet=False):
         "Run a command or a script of commands on the target machine"
-        if quiet:
-            return self.ssh(self.target, _in=commands)
-        else:
-            return self.ssh(self.target, _in=commands,
-                            _out=pse, _err=pse, _tee=True)
+        return run_sh_function(self.ssh, [self.target], commands, quiet)
 
     def copy_from(self, src, dest, quiet=False):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
-        if quiet:
-            return self.scp('-r', self.get_scp_dir(src), dest)
-        else:
-            return self.scp('-r', self.get_scp_dir(src), dest,
-                            _out=pse, _err=pse, _tee=True)
+        return run_sh_function(self.scp, ['-r', self.get_scp_dir(src), dest],
+                               None, quiet)
 
     def copy_to(self, src, dest, quiet=False):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
-        if quiet:
-            return self.cp('-r', src, self.get_scp_dir(dest))
-        else:
-            return self.scp('-r', src, self.get_scp_dir(dest),
-                            _out=pse, _err=pse, _tee=True)
+        return run_sh_function(self.scp, ['-r', src, self.get_scp_dir(dest)],
+                               None, quiet)
 
     def get_scp_dir(self, path):
         return '%s:%s' % (self.target, path)
@@ -171,33 +161,24 @@ class VzRunner(object):
 
         """
         wrapped_commands = wrap_in_env(commands)
-        if quiet:
-            return sh.vzctl('exec2', self.ctid, 'bash', _in=wrapped_commands)
-        else:
-            return sh.vzctl('exec2', self.ctid, 'bash', _in=wrapped_commands,
-                            _out=pse, _err=pse, _tee=True)
+        return run_sh_function(sh.vzctl, ['exec2', self.ctid, 'bash'],
+                               wrapped_commands, quiet)
 
     def copy_from(self, src, dest, quiet=False):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
-        if quiet:
-            return sh.cp('-r', self.get_vz_dir(src), dest)
-        else:
-            return sh.cp('-r', self.get_vz_dir(src), dest,
-                         _out=pse, _err=pse, _tee=True)
+        return run_sh_function(sh.cp, ['-r', self.get_vz_dir(src), dest], None,
+                               quiet)
 
     def copy_to(self, src, dest, quiet=False):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
-        if quiet:
-            return sh.cp('-r', src, self.get_vz_dir(dest))
-        else:
-            return sh.cp('-r', src, self.get_vz_dir(dest),
-                         _out=pse, _err=pse, _tee=True)
+        return run_sh_function(sh.cp, ['-r', src, self.get_vz_dir(dest)], None,
+                               quiet)
 
     def interactive(self):
         "Open an interactive shell on the target machine"
@@ -231,33 +212,21 @@ class LocalRunner(object):
         four environments: local, vz, ssh, and ssh to vz.
 
         """
-        if quiet:
-            return sh.bash(_in=commands)
-        else:
-            return sh.bash(_in=commands,
-                           _out=pse, _err=pse, _tee=True)
+        return run_sh_function(sh.bash, [], commands, quiet)
 
     def copy_from(self, src, dest, quiet=False):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
-        if quiet:
-            return sh.cp('-r', src, dest)
-        else:
-            return sh.cp('-r', src, dest,
-                         _out=pse, _err=pse, _tee=True)
+        return run_sh_function(sh.cp, ['-r', src, dest], None, quiet)
 
     def copy_to(self, src, dest, quiet=False):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
-        if quiet:
-            return sh.cp('-r', src, dest)
-        else:
-            return sh.cp('-r', src, dest,
-                         _out=pse, _err=pse, _tee=True)
+        return run_sh_function(sh.cp, ['-r', src, dest], None, quiet)
 
     def interactive(self):
         "Open an interactive shell on the target machine"
@@ -269,3 +238,32 @@ class LocalRunner(object):
         on the target
         """
         return "bash"
+
+
+class RunnerError(Exception):
+
+    def __init__(self, full_cmd, stdin, stdout, stderr, exit_code):
+        self.msg = """
+        RAN: %s
+
+        STDIN: %s
+
+        STDOUT: %s
+
+        STDERR: %s
+
+        EXIT_CODE: %d
+        """ % (full_cmd, stdin, stdout, stderr, exit_code)
+        super(RunnerError, self).__init__(self.msg)
+
+
+def run_sh_function(sh_function, args, stdin=None, verbose=True):
+    try:
+        if verbose:
+            return sh_function(args, _in=stdin,
+                               _out=pse, _err=pse, _tee=True)
+        else:
+            return sh_function(args, _in=stdin)
+    except sh.ErrorReturnCode as e:
+        raise RunnerError(e.full_cmd, stdin or '', e.stdout, e.stderr,
+                          e.exit_code)
