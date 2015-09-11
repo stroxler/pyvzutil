@@ -243,6 +243,11 @@ class LocalRunner(object):
 class RunnerError(Exception):
 
     def __init__(self, full_cmd, stdin, stdout, stderr, exit_code):
+        self.full_cmd = full_cmd
+        self.stdin = stdin
+        self.stdout = stdout
+        self.stderr = stderr
+        self.exit_code = exit_code
         self.msg = """
         RAN: %s
 
