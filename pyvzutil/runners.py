@@ -263,13 +263,13 @@ class RunnerError(Exception):
         super(RunnerError, self).__init__(self.msg)
 
 
-def run_sh_function(sh_function, args, stdin=None, verbose=True):
+def run_sh_function(sh_function, args, stdin=None, quiet=True):
     try:
-        if verbose:
+        if quiet:
+            return sh_function(args, _in=stdin)
+        else:
             return sh_function(args, _in=stdin,
                                _out=pse, _err=pse, _tee=True)
-        else:
-            return sh_function(args, _in=stdin)
     except sh.ErrorReturnCode as e:
         raise RunnerError(e.full_cmd, stdin or '', e.stdout, e.stderr,
                           e.exit_code)
