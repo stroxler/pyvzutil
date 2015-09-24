@@ -27,13 +27,17 @@ class SshToVzRunner(object):
 
         Parameters
         ----------
-        host : string
-            hostname or ip of the target machine
         ctid : int
             ctid of the target machine
+        host : string
+            hostname or ip of the target machine
+        user : string
+            username to ssh as
         ssh_options : list of flags to ssh
             ssh options, e.g. ['-p', '2222', '-o', 'StrictHostKeyChecking=no']
         """
+        if '-t' not in ssh_options:
+            ssh_options.append('-t')
         self.ssh_runner = SshRunner(host, user, port, ssh_options)
         self.ctid = ctid
 
