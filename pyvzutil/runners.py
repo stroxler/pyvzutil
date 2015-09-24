@@ -101,7 +101,7 @@ class SshRunner(object):
         self.ssh_options = ['-p', '%d' % port]
         self.scp_options = ['-P', '%d' % port]
         self.ssh_options.extend(ssh_options)
-        self.scp_options.extend(ssh_options)
+        self.scp_options.extend([o for o in ssh_options if o != '-t'])
         self.ssh = sh.ssh.bake(self.ssh_options)
         self.scp = sh.scp.bake(self.scp_options)
 
