@@ -7,7 +7,7 @@ def readme():
 
 
 setup(name='pyvzutil',
-      version='0.0.7',
+      version='0.0.8',
       description='Utilities for working with openvz clusters',
       long_description=readme(),
       classifiers=[
