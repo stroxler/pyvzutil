@@ -2,14 +2,14 @@ import sys
 import sh
 import subprocess
 
-from templates import wrap_in_env, wrap_in_vz
+from templates import wrap_in_vz
 
 
 __all__ = [
+    'Runner',
+    'SshRunner',
     'LocalRunner',
     'VzRunner',
-    'SshRunner',
-    'SshToVzRunner',
     'RunnerError',
 ]
 
@@ -19,9 +19,78 @@ def pse(line):
     sys.stderr.write(line)
 
 
-class SshToVzRunner(object):
+class Runner(object):
 
-    def __init__(self, ctid, host, user='root', port=22, ssh_options=[]):
+    def __init__(self):
+        """
+        Create a class which can run commands, open interactive
+        sessions, and copy files to and from a computer. The computer could
+        be the local machine, a remote host, a local vz instance, or a vz
+        instance on a remote host.
+
+        For most commands, errors are converted from sh exceptions - which
+        know about the command, the exit code, and stdout/stderr - to
+        RunnerErrors which also know about stdin. This is needed because many
+        of the operations are run by opening remote sessions and then sending
+        commands over stdin.
+
+        Most commands have a `verbose` flag which will print the remote
+        command's stdout and stderr to the python process' stderr. This can
+        be useful for getting feedback about the progress of long-running
+        operations.
+
+        """
+        self._raise()
+
+    def run(self, commands, verbose=True):
+        """
+        Run the commands in the srting `command` on the target machine, and
+        return a sh object representing the output.
+
+        Return a sh object encapsulating the command, stderr, and stdout. If
+        used as a string, the object evaluates to stdout.
+
+        """
+        self._raise()
+
+    def copy_from(self, src, dest, verbose=True):
+        """
+        Copy from a location `src` on the target machine to a location
+        `dest` on the local machine.
+
+        """
+        self._raise()
+
+    def copy_to(self, src, dest, verbose=True):
+        """
+        Copy from a location `src` on the local machine to a location
+        `dest` on the target machine.
+
+        """
+        self._raise()
+
+    def interactive(self):
+        """
+        Open an interactive shell on the target machine.
+
+        """
+        self._raise()
+
+    def cmd(self):
+        """
+        Return as a string the shell command that would open an interactive
+        session on the target machine.
+
+        """
+        self._raise()
+
+    def _raise(self):
+        raise NotImplementedError("Runner is an abstract class")
+
+
+class VzRunner(Runner):
+
+    def __init__(self, ctid, outer_runner):
         """
         Create a Runner to access a vz container on a remote host.
 
@@ -29,51 +98,45 @@ class SshToVzRunner(object):
         ----------
         ctid : int
             ctid of the target machine
-        host : string
-            hostname or ip of the target machine
-        user : string
-            username to ssh as
-        ssh_options : list of flags to ssh
-            ssh options, e.g. ['-p', '2222', '-o', 'StrictHostKeyChecking=no']
+        outer_runner : Runner
+            A runner (e.g., a LocalRunner or an SshRunner) giving access to
+            the host where the vz instance is running.
+
         """
+        self.ctid = ctid
+        self.outer_runner = outer_runner
+
+    @classmethod
+    def over_ssh(cls, ctid, host, user='root', port=22, ssh_options=[]):
+        "Create a Runner for access to a remote vz container via ssh"
         if '-t' not in ssh_options:
             ssh_options.append('-t')
-        self.ssh_runner = SshRunner(host, user, port, ssh_options)
-        self.ctid = ctid
+        ssh_runner = SshRunner(host, user, port, ssh_options)
+        return cls(ctid, ssh_runner)
+
+    @classmethod
+    def local(cls, ctid):
+        "Create a runner for access to a vz container running on localhost"
+        local_runner = LocalRunner()
+        return cls(ctid, local_runner)
 
     def run(self, commands, verbose=True):
-        """
-        Run a command or a script of commands on the target machine.
-        """
         wrapped_commands = wrap_in_vz(commands, self.ctid)
-        return self.ssh_runner.run(wrapped_commands, verbose=verbose)
+        return self.outer_runner.run(wrapped_commands, verbose=verbose)
 
     def copy_from(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the remote machine to a location
-        `dest` on the local machine.
-        """
         vz_src = self.get_vz_dir(src)
-        return self.ssh_runner.copy_from(vz_src, dest, verbose=verbose)
+        return self.outer_runner.copy_from(vz_src, dest, verbose=verbose)
 
     def copy_to(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the local machine to a location
-        `dest` on the remote machine.
-        """
         vz_dest = self.get_vz_dir(dest)
-        return self.ssh_runner.copy_to(src, vz_dest, verbose=verbose)
+        return self.outer_runner.copy_to(src, vz_dest, verbose=verbose)
 
     def interactive(self):
-        "Open an interactive shell on the target machine"
         subprocess.call(self.cmd(), shell=True)
 
     def cmd(self):
-        """
-        Return as a string the shell command to boot an interactive shell
-        on the target
-        """
-        return "%s vzctl enter %s" % (self.ssh_runner.cmd(), self.ctid)
+        return "%s vzctl enter %s" % (self.outer_runner.cmd(), self.ctid)
 
     def get_vz_dir(self, path):
         """
@@ -83,14 +146,20 @@ class SshToVzRunner(object):
         return '/vz/root/%d/%s' % (self.ctid, path)
 
 
-class SshRunner(object):
+class SshRunner(Runner):
 
     def __init__(self, host, user='root', port=22, ssh_options=[]):
         """
+        Create a Runner for access to a remote host over ssh.
+
         Parameters
         ----------
         host : string
             hostname or ip of the target machine
+        user : string
+            username on the target machine
+        port : int
+            the port to use for ssh access
         ssh_options : list of flags to ssh
             ssh options, e.g. ['-p', '2222', '-o', 'StrictHostKeyChecking=no']
         """
@@ -106,142 +175,56 @@ class SshRunner(object):
         self.scp = sh.scp.bake(self.scp_options)
 
     def run(self, commands, verbose=True):
-        "Run a command or a script of commands on the target machine"
         return run_sh_function(self.ssh, [self.target], commands, verbose)
 
     def copy_from(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the remote machine to a location
-        `dest` on the local machine.
-        """
         return run_sh_function(self.scp, ['-r', self.get_scp_dir(src), dest],
                                None, verbose)
 
     def copy_to(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the local machine to a location
-        `dest` on the remote machine.
-        """
         return run_sh_function(self.scp, ['-r', src, self.get_scp_dir(dest)],
                                None, verbose)
 
-    def get_scp_dir(self, path):
-        return '%s:%s' % (self.target, path)
-
     def interactive(self):
-        "Open an interactive shell on the target machine"
         subprocess.call(self.cmd('ssh'), shell=True)
 
     def cmd(self, which='ssh'):
+        return "ssh %s %s" % (' '.join(self.ssh_options), self.target)
+
+    def scp_cmd(self):
         """
-        Return as a string the shell command to boot an interactive shell
-        on the target
+        Since scp and ssh flags differ somewhat, we provide a separate
+        function to get the preamble for scp operations to/from this machine.
         """
-        if which == 'ssh':
-            return "ssh %s %s" % (' '.join(self.ssh_options), self.target)
-        elif which == 'scp':
-            return "scp %s %s" % (' '.join(self.scp_options), self.target)
-        else:
-            raise ValueError('`which` should be either "ssh" or "scp"')
+        return "scp %s %s" % (' '.join(self.scp_options), self.target)
+
+    def get_scp_dir(self, path):
+        "Get the representation of a remote dir (e.g. myhost:/tmp) for scp"
+        return '%s:%s' % (self.target, path)
 
 
-class VzRunner(object):
+class LocalRunner(Runner):
 
-    def __init__(self, ctid):
+    def __init__(self):
         """
-        Parameters
-        ----------
-        ctid : int
-            ctid of the target machine
+        Create a Runner with the local machine as the target.
+
         """
-        self.ctid = ctid
+        pass
 
     def run(self, commands, verbose=True):
-        """
-        Run a command or a script of commands on the target machine.
-
-        The run is with vzctl exec2, so the environment may not be quite right.
-        We attempt to define HOME and USER, and source all the usual files, in
-        order to minimize this problem.
-
-        """
-        wrapped_commands = wrap_in_env(commands)
-        return run_sh_function(sh.vzctl, ['exec2', self.ctid, 'bash'],
-                               wrapped_commands, verbose)
-
-    def copy_from(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the remote machine to a location
-        `dest` on the local machine.
-        """
-        return run_sh_function(sh.cp, ['-r', self.get_vz_dir(src), dest], None,
-                               verbose)
-
-    def copy_to(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the local machine to a location
-        `dest` on the remote machine.
-        """
-        return run_sh_function(sh.cp, ['-r', src, self.get_vz_dir(dest)], None,
-                               verbose)
-
-    def interactive(self):
-        "Open an interactive shell on the target machine"
-        subprocess.call(self.cmd(), shell=True)
-
-    def cmd(self):
-        """
-        Return as a string the shell command to boot an interactive shell
-        on the target
-        """
-        return "vzctl enter %s" % self.ctid
-
-    def get_vz_dir(self, path):
-        return '/vz/root/%d/%s' % (self.ctid, path)
-
-
-class LocalRunner(object):
-
-    def __init__(self, ctid):
-        """
-        Parameters
-        ----------
-        """
-        self.ctid = ctid
-
-    def run(self, commands, verbose=True):
-        """
-        Run a command or a script of commands on the local machine.
-
-        Obviously this is silly, the point is to have the same api for all
-        four environments: local, vz, ssh, and ssh to vz.
-
-        """
         return run_sh_function(sh.bash, [], commands, verbose)
 
     def copy_from(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the remote machine to a location
-        `dest` on the local machine.
-        """
         return run_sh_function(sh.cp, ['-r', src, dest], None, verbose)
 
     def copy_to(self, src, dest, verbose=True):
-        """
-        Copy from a location `src` on the local machine to a location
-        `dest` on the remote machine.
-        """
         return run_sh_function(sh.cp, ['-r', src, dest], None, verbose)
 
     def interactive(self):
-        "Open an interactive shell on the target machine"
         subprocess.call(self.cmd(), shell=True)
 
     def cmd(self):
-        """
-        Return as a string the shell command to boot an interactive shell
-        on the target
-        """
         return "bash"
 
 
