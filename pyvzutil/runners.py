@@ -41,28 +41,28 @@ class SshToVzRunner(object):
         self.ssh_runner = SshRunner(host, user, port, ssh_options)
         self.ctid = ctid
 
-    def run(self, commands, quiet=False):
+    def run(self, commands, verbose=True):
         """
         Run a command or a script of commands on the target machine.
         """
         wrapped_commands = wrap_in_vz(commands, self.ctid)
-        return self.ssh_runner.run(wrapped_commands, quiet=quiet)
+        return self.ssh_runner.run(wrapped_commands, verbose=verbose)
 
-    def copy_from(self, src, dest, quiet=False):
+    def copy_from(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
         vz_src = self.get_vz_dir(src)
-        return self.ssh_runner.copy_from(vz_src, dest, quiet=quiet)
+        return self.ssh_runner.copy_from(vz_src, dest, verbose=verbose)
 
-    def copy_to(self, src, dest, quiet=False):
+    def copy_to(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
         vz_dest = self.get_vz_dir(dest)
-        return self.ssh_runner.copy_to(src, vz_dest, quiet=quiet)
+        return self.ssh_runner.copy_to(src, vz_dest, verbose=verbose)
 
     def interactive(self):
         "Open an interactive shell on the target machine"
@@ -105,25 +105,25 @@ class SshRunner(object):
         self.ssh = sh.ssh.bake(self.ssh_options)
         self.scp = sh.scp.bake(self.scp_options)
 
-    def run(self, commands, quiet=False):
+    def run(self, commands, verbose=True):
         "Run a command or a script of commands on the target machine"
-        return run_sh_function(self.ssh, [self.target], commands, quiet)
+        return run_sh_function(self.ssh, [self.target], commands, verbose)
 
-    def copy_from(self, src, dest, quiet=False):
+    def copy_from(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
         return run_sh_function(self.scp, ['-r', self.get_scp_dir(src), dest],
-                               None, quiet)
+                               None, verbose)
 
-    def copy_to(self, src, dest, quiet=False):
+    def copy_to(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
         return run_sh_function(self.scp, ['-r', src, self.get_scp_dir(dest)],
-                               None, quiet)
+                               None, verbose)
 
     def get_scp_dir(self, path):
         return '%s:%s' % (self.target, path)
@@ -156,7 +156,7 @@ class VzRunner(object):
         """
         self.ctid = ctid
 
-    def run(self, commands, quiet=False):
+    def run(self, commands, verbose=True):
         """
         Run a command or a script of commands on the target machine.
 
@@ -167,23 +167,23 @@ class VzRunner(object):
         """
         wrapped_commands = wrap_in_env(commands)
         return run_sh_function(sh.vzctl, ['exec2', self.ctid, 'bash'],
-                               wrapped_commands, quiet)
+                               wrapped_commands, verbose)
 
-    def copy_from(self, src, dest, quiet=False):
+    def copy_from(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
         return run_sh_function(sh.cp, ['-r', self.get_vz_dir(src), dest], None,
-                               quiet)
+                               verbose)
 
-    def copy_to(self, src, dest, quiet=False):
+    def copy_to(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
         return run_sh_function(sh.cp, ['-r', src, self.get_vz_dir(dest)], None,
-                               quiet)
+                               verbose)
 
     def interactive(self):
         "Open an interactive shell on the target machine"
@@ -209,7 +209,7 @@ class LocalRunner(object):
         """
         self.ctid = ctid
 
-    def run(self, commands, quiet=False):
+    def run(self, commands, verbose=True):
         """
         Run a command or a script of commands on the local machine.
 
@@ -217,21 +217,21 @@ class LocalRunner(object):
         four environments: local, vz, ssh, and ssh to vz.
 
         """
-        return run_sh_function(sh.bash, [], commands, quiet)
+        return run_sh_function(sh.bash, [], commands, verbose)
 
-    def copy_from(self, src, dest, quiet=False):
+    def copy_from(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the remote machine to a location
         `dest` on the local machine.
         """
-        return run_sh_function(sh.cp, ['-r', src, dest], None, quiet)
+        return run_sh_function(sh.cp, ['-r', src, dest], None, verbose)
 
-    def copy_to(self, src, dest, quiet=False):
+    def copy_to(self, src, dest, verbose=True):
         """
         Copy from a location `src` on the local machine to a location
         `dest` on the remote machine.
         """
-        return run_sh_function(sh.cp, ['-r', src, dest], None, quiet)
+        return run_sh_function(sh.cp, ['-r', src, dest], None, verbose)
 
     def interactive(self):
         "Open an interactive shell on the target machine"
@@ -267,13 +267,13 @@ class RunnerError(Exception):
         super(RunnerError, self).__init__(self.msg)
 
 
-def run_sh_function(sh_function, args, stdin=None, quiet=True):
+def run_sh_function(sh_function, args, stdin=None, verbose=False):
     try:
-        if quiet:
-            return sh_function(args, _in=stdin)
-        else:
+        if verbose:
             return sh_function(args, _in=stdin,
                                _out=pse, _err=pse, _tee=True)
+        else:
+            return sh_function(args, _in=stdin)
     except sh.ErrorReturnCode as e:
         raise RunnerError(e.full_cmd, stdin or '', e.stdout, e.stderr,
                           e.exit_code)
