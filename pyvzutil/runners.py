@@ -197,11 +197,14 @@ class SshRunner(Runner):
         self.user = user
         self.target = '%s@%s' % (user, host)
         self.port = port
-        # set ssh and scp options. This code is annoying b/c -p vs -P
+        # set ssh and scp options. This code is needed because -p vs -P, and
+        # because ssh needs -t in many cases, but scp doesn't take -t.
         self.ssh_options = ['-p', '%d' % port]
         self.scp_options = ['-P', '%d' % port]
         self.ssh_options.extend(ssh_options)
         self.scp_options.extend([o for o in ssh_options if o != '-t'])
+        if '-t' not in self.ssh_options:
+            self.ssh_options.append('-t')
         # set rsync options. The ssh options go inside the -e argument
         self.rsync_options = [
             '-e', 'ssh {}'.format(' '.join(self.ssh_options)),
