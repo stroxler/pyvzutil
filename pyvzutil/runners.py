@@ -69,6 +69,28 @@ class Runner(object):
         """
         self._raise()
 
+    def sync_from(self, src, dest, verbose=True):
+        """
+        Sync from a location `src` on the target machine to a location
+        `dest` on the local machine.
+
+        Note: the behavior of copy_from should match cp / scp behavior,
+        whereas the behavior of sync_from should match rsync -aH behavior.
+
+        """
+        self._raise()
+
+    def sync_to(self, src, dest, verbose=True):
+        """
+        Copy from a location `src` on the local machine to a location
+        `dest` on the target machine.
+
+        Note: the behavior of copy_to should match cp / scp behavior,
+        whereas the behavior of sync_to should match rsync -aH behavior.
+
+        """
+        self._raise()
+
     def interactive(self):
         """
         Open an interactive shell on the target machine.
@@ -132,6 +154,14 @@ class VzRunner(Runner):
         vz_dest = self.get_vz_dir(dest)
         return self.outer_runner.copy_to(src, vz_dest, verbose=verbose)
 
+    def sync_from(self, src, dest, verbose=True):
+        vz_src = self.get_vz_dir(src)
+        return self.outer_runner.sync_from(vz_src, dest, verbose=verbose)
+
+    def sync_to(self, src, dest, verbose=True):
+        vz_dest = self.get_vz_dir(dest)
+        return self.outer_runner.sync_to(src, vz_dest, verbose=verbose)
+
     def interactive(self):
         subprocess.call(self.cmd(), shell=True)
 
@@ -167,12 +197,20 @@ class SshRunner(Runner):
         self.user = user
         self.target = '%s@%s' % (user, host)
         self.port = port
+        # set ssh and scp options. This code is annoying b/c -p vs -P
         self.ssh_options = ['-p', '%d' % port]
         self.scp_options = ['-P', '%d' % port]
         self.ssh_options.extend(ssh_options)
         self.scp_options.extend([o for o in ssh_options if o != '-t'])
+        # set rsync options. The ssh options go inside the -e argument
+        self.rsync_options = [
+            '-e', 'ssh {}'.format(' '.join(self.ssh_options)),
+            '-aHz'
+        ]
+        # bake the commands
         self.ssh = sh.ssh.bake(self.ssh_options)
         self.scp = sh.scp.bake(self.scp_options)
+        self.rsync = sh.rsync.bake(self.rsync_options)
 
     def run(self, commands, verbose=True):
         return run_sh_function(self.ssh, [self.target], commands, verbose)
@@ -183,6 +221,14 @@ class SshRunner(Runner):
 
     def copy_to(self, src, dest, verbose=True):
         return run_sh_function(self.scp, ['-r', src, self.get_scp_dir(dest)],
+                               None, verbose)
+
+    def sync_from(self, src, dest, verbose=True):
+        return run_sh_function(self.rsync, [self.get_scp_dir(src), dest],
+                               None, verbose)
+
+    def sync_to(self, src, dest, verbose=True):
+        return run_sh_function(self.rsync, [src, self.get_scp_dir(dest)],
                                None, verbose)
 
     def interactive(self):
@@ -210,7 +256,7 @@ class LocalRunner(Runner):
         Create a Runner with the local machine as the target.
 
         """
-        pass
+        self.rsync = sh.rsync.bake('-aH')
 
     def run(self, commands, verbose=True):
         return run_sh_function(sh.bash, [], commands, verbose)
@@ -220,6 +266,14 @@ class LocalRunner(Runner):
 
     def copy_to(self, src, dest, verbose=True):
         return run_sh_function(sh.cp, ['-r', src, dest], None, verbose)
+
+    def sync_from(self, src, dest, verbose=True):
+        return run_sh_function(self.rsync, [src, dest],
+                               None, verbose)
+
+    def sync_to(self, src, dest, verbose=True):
+        return run_sh_function(self.rsync, [src, dest],
+                               None, verbose)
 
     def interactive(self):
         subprocess.call(self.cmd(), shell=True)
